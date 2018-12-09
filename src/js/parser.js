@@ -169,7 +169,7 @@ function handleForStatement(obj) {
 }
 
 function handleOperator(_newObj, _EXPRESSION, dontPush) {
-    _newObj.name = _EXPRESSION.left.name; //|| _EXPRESSION.left.value;
+    _newObj.name = _EXPRESSION.left.name || handleMemberExpression(_EXPRESSION.left);
     var _value = '';
 
     // if (_EXPRESSION.right) {
@@ -276,7 +276,11 @@ function getBody(_body) {
 function handleMemberExpression(obj) {
     var prop;
     if (obj.computed) {
-        prop = recursiveChilds(obj.property);
+        prop = recursiveChilds(obj.property).toString();
+        
+        // if(!isNaN(parseInt(prop)))
+        //     return prop;
+
         prop = prop.startsWith('(') ? prop.substring(1).substring(0, prop.length - 2).trim() : prop;
         return '' + obj.object.name + '[' + prop + ']';
     } else {

@@ -14,8 +14,7 @@ $(document).ready(function () {
 
         var {_line, _container} = parser.objectToTable(parsedCode);
         var symbols = symbolizer.symbolizer(_container, input_vector, _line);
-        console.log(symbols);
-        
+
         print(parser.printTable(codeToParse));
 
         $('#parsedCode').val(JSON.stringify(parsedCode, null, 2));

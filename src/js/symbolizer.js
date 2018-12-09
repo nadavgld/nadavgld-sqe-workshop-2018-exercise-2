@@ -1,5 +1,11 @@
 var var_table = {}, temp_table = {}, symbolize = [], input = [], pred_table;
 
+/*
+Errors:
+    Strings
+    Booleans
+*/
+
 // On printing symbolized code - replace original code by statement type
 const printSymbolReplacement = {
     'return statement': (c, symbol) => c.code.replace(/return.*/, 'return ' + symbol.value + ';'),
@@ -17,8 +23,13 @@ function symbolizer(obj, input_vector) {
     convertInput(input_vector);
 
     pred_table.forEach(pred => {
+        console.log(pred);
         handlePreds(pred);
     });
+
+    console.log(pred_table);
+    console.log(var_table);
+    console.log(symbolize);
 
     return symbolize;
 }
@@ -79,7 +90,7 @@ function blockExit() {
 // Handle return-statement: Convert value, push to symbolize array, exit block
 function handleReturnStatement(_pred) {
     var pred = JSON.parse(JSON.stringify(_pred));
-    var _convertedValue = convertValueToInputVars(pred.value, false, true);
+    var _convertedValue = convertValueToInputVars(pred.value, false, false);
 
     _convertedValue = removeZeros(_convertedValue);
 
@@ -91,15 +102,20 @@ function handleReturnStatement(_pred) {
 
 // Handle Assignmets -  Convert value, push to symbolize array if is Input assign
 function handleAssignmentExp(pred) {
-    var _convertedValue = convertValueToInputVars(pred.value, false, false);
-    var _result = convertValueToInputVars(pred.value, true, true);
-
-    _convertedValue = removeZeros(_convertedValue);
-    var_table[pred.name] = { value: _convertedValue, result: _result };
+    var _convertedValue = convertValueToInputVars(pred.value, true, false);
+    var _result = parseInt(convertValueToInputVars(pred.value, true, true));
 
     if (isInput(pred.name)) {
-        pred.value = _convertedValue;
+        pred.value = _result;
         symbolize.push(pred);
+    }
+
+    if (isInputArray(pred.name)) {
+        setInputArrayValue(pred.name, _result);
+        symbolize.push(pred);
+    } else {
+        _convertedValue = removeZeros(_convertedValue);
+        var_table[pred.name] = { value: _convertedValue, result: _result };
     }
 }
 
@@ -155,8 +171,8 @@ function handleWhile(_pred) {
 // Convert predict input by input variables
 // Params: value - predict value, toEval - boolean if to evaluate, notIf - boolean if the predict is if
 function convertValueToInputVars(value, toEval, notIf) {
-    if (isNumber(value))
-        return value;
+    if (isNumber(value) || isInputArray(value) || isInput(value))
+        return handleQuickReplace(value, toEval);
 
     var _replaceAgain = true;
     var _convertedArr = replaceToInputs(value, toEval, notIf);
@@ -168,26 +184,58 @@ function convertValueToInputVars(value, toEval, notIf) {
         try {
             var evalue = eval(_convertedArr.join(''));
             _replaceAgain = false;
-
             return evalue;
         } catch (e) { _convertedArr = replaceToInputs(_convertedArr.join(''), toEval, notIf); }
     }
 }
 
+function handleQuickReplace(value, toEval) {
+    return isNumber(value) ? value : isInputArray(value) && toEval ? eval(getInputArrayValue(value)) : isInputArray(value) ? getInputArrayValue(value) : isInput(value) && toEval ? eval(var_table[value].value) : isInput(value) ? var_table[value].value : undefined;
+}
+
 // Check each charcter - if is input - evaluate its value,
 // else if is a var from var_table - takes its value\result 
 function replaceToInputs(value, toEval, notIf) {
-    var _convertedArr = [];
-    value.split('').filter(l => l.trim().localeCompare('')).forEach(l => {
-        if (isInput(l))
-            _convertedArr.push(toEval ? var_table[l].value : l);
-        else if (var_table[l] != undefined)
-            _convertedArr = _checkWhichToReplace(l, toEval, notIf, _convertedArr);
-        else
-            _convertedArr.push(l);
+    var _convertedArr = [], splitted, indexToSkip;
+    splitted = value.split('').filter(l => l.trim().localeCompare(''));
+    splitted.forEach((l, index) => {
+        if (indexToSkip >= index)
+            return;
+
+        // if (isInput(l) || isInputArray(l))
+        indexToSkip = handleReplaceInput(_convertedArr, l, toEval, index, splitted, notIf);
+        if (indexToSkip == undefined)
+            if (var_table[l] != undefined)
+                _convertedArr = _checkWhichToReplace(l, toEval, notIf, _convertedArr);
+            else
+                _convertedArr.push(l);
     });
 
     return _convertedArr;
+}
+
+function handleReplaceInput(_convertedArr, l, toEval, index, arr, notIf) {
+    var key = "", i, j, variable = "";
+
+    for (var j = index; j < arr.length; j++) {
+        variable += arr[j];
+        if (isInput(variable)) {
+            _convertedArr.push(toEval ? var_table[variable].value : variable);
+            return j;
+        }
+
+        if (isInputArray(variable)) {
+            for (i = j; i < arr.length; i++) {
+                key += arr[i];
+                if (arr[i] == ']')
+                    break;
+            }
+
+            _convertedArr.push(toEval ? getInputArrayValue(key) : key);
+            return i;
+        }
+    }
+    return undefined;
 }
 
 // Previous function was too long so I had to split this one..
@@ -253,11 +301,46 @@ function removeBracelets(value) {
 // Check if predicat is an Input to the function
 function isInput(key) {
     for (var i = 0; i < input.length; i++)
-        if (input[i].key == key)
+        if (input[i].key == key && !(input[i].value instanceof Array))
             return true;
 
     return false;
 }
+
+function isInputArray(key) {
+    if (key.indexOf('[') > -1 && key.indexOf(']') > -1) {
+        var _key = key.trim().split(/\[|\]/)[0];
+
+        for (var i = 0; i < input.length; i++)
+            if (input[i].key == _key && (input[i].value instanceof Array))
+                return true;
+
+        return false;
+    }
+
+    return var_table[key] !== undefined && var_table[key].value instanceof Array;
+}
+
+function getInputArrayValue(str) {
+    if (isInputArray(str)) {
+        var _key = str.trim().split(/\[|\]/)[0];
+        var _index = str.trim().split(/\[|\]/)[1];
+        var index = convertValueToInputVars(_index, true, true);
+
+        return var_table[_key].value[index];
+    }
+
+    return undefined;
+}
+
+function setInputArrayValue(str, _result) {
+    var _key = str.trim().split(/\[|\]/)[0];
+    var _index = str.trim().split(/\[|\]/)[1];
+    var index = parseInt(convertValueToInputVars(_index, true, true));
+
+    var_table[_key].value[index] = _result;
+}
+
 
 //-----------------------------
 
@@ -271,8 +354,16 @@ function print(symbols, srcCode) {
     // Remove empty spaces on source code
     for (var i = 0; i < _removeSpaces.length; i++) {
         var isSymbol = symbols.find(t => t.line == i + 1);
-        if (isSymbol || _removeSpaces[i].indexOf('}') > -1 || _removeSpaces[i].indexOf('{') > -1)
-            _filtered.push({ code: _removeSpaces[i], line: i + 1 });
+        if (isSymbol || _removeSpaces[i].indexOf('}') > -1 || _removeSpaces[i].indexOf('{') > -1) {
+            if (_removeSpaces[i].trim() == "}") {
+                _filtered.push({ code: _removeSpaces[i], line: i });
+
+                if (i + 1 < _removeSpaces.length) _filtered.push({ code: _removeSpaces[++i], line: i });
+
+            }
+            else
+                _filtered.push({ code: _removeSpaces[i], line: i + 1 });
+        }
     }
 
     return _replaceSymbols(symbols, _filtered);
@@ -352,20 +443,26 @@ function conversionHandler(_splitted) {
     for (var i = 0; i < _splitted.length; i++) {
         var _var = _splitted[i].trim();
         var isArray = _var.indexOf('[') > -1;
-
         if (isArray) {
             const key = _splitted[i - 1].trim();
             var arr = handleArrayInput(_splitted, _var, i);
             input.push({ key: key, value: arr });
-            var_table[key] = {value: arr};
+            var_table[key] = { value: arr };
+            while (_splitted[i].indexOf(']') == -1)
+                i++;
+            _lastKey = null;
         } else if (!_lastKey) {
             _lastKey = _var;
         } else {
-            var_table[_lastKey] = {value: convertToType(_var)};
-            input.push({ key: _lastKey, value: convertToType(_var) });
-            _lastKey = null;
+            _lastKey = updateVarValue(_lastKey, _var);
         }
     }
+}
+
+// Enter new entry of variable to var_table
+function updateVarValue(_lastKey, _var) {
+    var_table[_lastKey] = { value: convertToType(_var) };
+    input.push({ key: _lastKey, value: convertToType(_var) });
 }
 
 // Handler for input variable that is an array
@@ -398,6 +495,14 @@ function convertToType(_value) {
 
 function isNumber(_value) {
     return !isNaN(parseInt(_value));
+}
+
+function isArray(_value) {
+    return _value.toString().indexOf('[') > -1;
+}
+
+function array_getIdentifier(_value) {
+    return _value.toString().split('[')[0];
 }
 
 function isInt(n) {
