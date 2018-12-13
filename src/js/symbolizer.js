@@ -1,10 +1,5 @@
+// Global variables
 var var_table = {}, temp_table = {}, symbolize = [], input = [], pred_table;
-
-/*
-Errors:
-    Strings
-    Booleans
-*/
 
 // On printing symbolized code - replace original code by statement type
 const printSymbolReplacement = {
@@ -14,6 +9,8 @@ const printSymbolReplacement = {
     'assignment expression': (c, symbol) => c.code.replace(/=.*/, '= ' + symbol.value + ';'),
     'while statement': (c, symbol) => c.code.replace(/while.*{/, 'while (' + symbol.condition + ') {').toString(),
 };
+
+// TODO: Printing errs!!!
 
 // Initialize Symbolizer - convert input and handle predicats
 // Input - Parser obj result, String of input vector ex: (x=1,y=2..)
@@ -170,31 +167,60 @@ function handleWhile(_pred) {
 
 // Convert predict input by input variables
 // Params: value - predict value, toEval - boolean if to evaluate, notIf - boolean if the predict is if
-function convertValueToInputVars(value, toEval, notIf) {
+function convertValueToInputVars(value, toEval) {
+    if (value === undefined) return '';
     if (isNumber(value) || isInputArray(value) || isInput(value))
         return handleQuickReplace(value, toEval);
 
+    // if (isCondition(value))
+    return conditionHandler(value, toEval);
+}
+
+/*
     var _replaceAgain = true;
     var _convertedArr = replaceToInputs(value, toEval, notIf);
     if (!toEval)
         return replaceToInputs(_convertedArr.join(''), toEval, notIf).join('');
 
     // While there's a variables to replace to input variable
-    while (_replaceAgain) {
+    var _numOfLoops = 0
+    while (_replaceAgain && _numOfLoops < 10) {
+        _numOfLoops++;
         try {
             var evalue = eval(_convertedArr.join(''));
             _replaceAgain = false;
             return evalue;
         } catch (e) { _convertedArr = replaceToInputs(_convertedArr.join(''), toEval, notIf); }
     }
-}
+
+    return "'" + _convertedArr.join('') + "'";
+*/
 
 function handleQuickReplace(value, toEval) {
-    return isNumber(value) ? value : isInputArray(value) && toEval ? eval(getInputArrayValue(value)) : isInputArray(value) ? getInputArrayValue(value) : isInput(value) && toEval ? eval(var_table[value].value) : isInput(value) ? var_table[value].value : undefined;
+    if (isNumber(value)) return parseFloat(value);
+
+    if (isInputArray(value)) return handleArrayQuick(value, toEval);
+
+    if (isInput(value)) return handleInputQuick(value, toEval);
+
+    return undefined;
+}
+
+function handleInputQuick(value, toEval) {
+    if (toEval) return eval(var_table[value].value);
+
+    return var_table[value].value;
+}
+
+function handleArrayQuick(value, toEval) {
+    if (toEval) return eval(getInputArrayValue(value));
+
+    return getInputArrayValue(value);
 }
 
 // Check each charcter - if is input - evaluate its value,
 // else if is a var from var_table - takes its value\result 
+/*
 function replaceToInputs(value, toEval, notIf) {
     var _convertedArr = [], splitted, indexToSkip;
     splitted = value.split('').filter(l => l.trim().localeCompare(''));
@@ -202,7 +228,6 @@ function replaceToInputs(value, toEval, notIf) {
         if (indexToSkip >= index)
             return;
 
-        // if (isInput(l) || isInputArray(l))
         indexToSkip = handleReplaceInput(_convertedArr, l, toEval, index, splitted, notIf);
         if (indexToSkip == undefined)
             if (var_table[l] != undefined)
@@ -214,7 +239,86 @@ function replaceToInputs(value, toEval, notIf) {
     return _convertedArr;
 }
 
-function handleReplaceInput(_convertedArr, l, toEval, index, arr, notIf) {
+function isCondition(value) {
+    if (value === undefined) return false;
+
+    const _arr = ['==', '===', '!=', '!==', '>', '<', '>=', '=>', '<=', '=<'];
+    for (var i = 0; i < _arr.length; i++)
+        if (value.indexOf(_arr[i]) > -1)
+            return true;
+
+    return false;
+}
+
+*/
+
+function conditionHandler(value, toEval) {
+    if (value === undefined) return '';
+    var _val = value.split(/==|===|!=|!==|[+]|-|[*]|\/|>|<|>=|=>|<=|=<|:|\(|\)/);
+    _val.forEach(val => {
+        var replacement = conditionTypeHandler(val, toEval);
+
+        replacement = setReplacement(replacement, toEval, val);
+        value = replaceAll(value, val.trim(), replacement);
+        value = replaceAll(value, `''`, `'`);
+    });
+    value = cleanValue(value);
+    return toEval ? eval(value) : value;
+}
+
+function conditionTypeHandler(val, toEval) {
+    var replacement;
+    if (isInputArray(val.trim()))
+        replacement = toEval ? getInputArrayValue(val.trim()) : val.trim();
+    else if (isInput(val.trim()))
+        replacement = toEval ? var_table[val.trim()].value : val.trim();
+    else
+        replacement = conditionTypeHandler2(val, toEval);
+
+    return replacement;
+}
+
+function conditionTypeHandler2(val, toEval) {
+    var replacement;
+
+    if (var_table[val.trim()] !== undefined)
+        replacement = var_table[val.trim()].value;
+    else if (isBoolean(val.trim()) && toEval)
+        replacement = toBoolean(val.trim());
+
+    return replacement;
+}
+
+function cleanValue(value) {
+    const _arr = ['==', '===', '!=', '!==', '>', '<', '>=', '=>', '<=', '=<', '+', '*', '/', ':', ')', '('];
+    _arr.forEach(symbol => {
+        value.replace(`' + ${symbol} + '`, symbol);
+        value.replace(`' + ${symbol}`, symbol);
+        value.replace(`${symbol} + '`, symbol);
+    });
+
+    return value;
+
+}
+
+function setReplacement(replacement, toEval, val) {
+    if (replacement === undefined)
+        replacement = val.trim();
+
+    if (isNumberOrString(replacement) && toEval)
+        replacement = "'" + replacement + "'";
+
+    return replacement;
+}
+
+function isNumberOrString(val) {
+    val = val.toString();
+    /*(val.charCodeAt(0) >= 48 && val.charCodeAt(0) <= 57) ||*/
+    return (val.charCodeAt(0) >= 65 && val.charCodeAt(0) <= 90) || (val.charCodeAt(0) >= 97 && val.charCodeAt(0) <= 122);
+}
+
+/*
+function handleReplaceInput(_convertedArr, l, toEval, index, arr) {
     var key = "", i, j, variable = "";
 
     for (var j = index; j < arr.length; j++) {
@@ -245,6 +349,8 @@ function _checkWhichToReplace(l, toEval, notIf, _convertedArr) {
     return _convertedArr;
 }
 
+*/
+
 // Remove +zeros from predicat input
 function removeZeros(x) {
     var res;
@@ -260,14 +366,19 @@ function removeZeros(x) {
 // Run over latest If\else-if statements and check thier result (true/false)
 function getPreviousIfResult() {
     var _hasTrue = false;
+    var _prevIfs = 0;
     for (var i = symbolize.length - 1; i >= 0; i--) {
 
+        _prevIfs = symbolize[i].type == 'else statement' ? _prevIfs + 1 : _prevIfs;
         _hasTrue = checkPrevSymbol(symbolize[i]);
         if (_hasTrue)
             break;
 
-        if (symbolize[i].type == 'if statement')
-            break;
+        if (symbolize[i].type == 'if statement') {
+            _prevIfs--;
+            if (_prevIfs == -1)
+                break;
+        }
     }
 
     return !_hasTrue;
@@ -308,6 +419,8 @@ function isInput(key) {
 }
 
 function isInputArray(key) {
+    if (key === undefined) return false;
+
     if (key.indexOf('[') > -1 && key.indexOf(']') > -1) {
         var _key = key.trim().split(/\[|\]/)[0];
 
@@ -488,7 +601,7 @@ function convertToType(_value) {
     if (!isNaN(parseInt(_value)))
         return isInt(_value) ? parseInt(_value) : parseFloat(_value);
     else if (isBoolean(_value))
-        return Boolean(_value);
+        return toBoolean(_value);
     else
         return _value.substr(1, _value.length - 2);
 }
@@ -497,6 +610,7 @@ function isNumber(_value) {
     return !isNaN(parseInt(_value));
 }
 
+/*
 function isArray(_value) {
     return _value.toString().indexOf('[') > -1;
 }
@@ -504,21 +618,43 @@ function isArray(_value) {
 function array_getIdentifier(_value) {
     return _value.toString().split('[')[0];
 }
+*/
 
 function isInt(n) {
     return n % 1 === 0;
 }
 
+/*
+function containNumber(value) {
+    var _split = value.toString().split('')
+    for (var i = 0; i < _split.length; i++) {
+        if (isNumber(_split[i]))
+            return true;
+    }
+
+    return false;
+}
+*/
+
 function isBoolean(value) {
+    value = value.toString();
     return value.toLowerCase() == 'true' || value.toLowerCase() == 'false';
+}
+
+function toBoolean(value) {
+    return value.toLowerCase() == 'true'
 }
 
 // Help function - replace all "search" text with "replacement" text in target string
 function replaceAll(target, search, replacement) {
-    if (target.toString() == target)
-        return target;
+    var prev = target.toString();
+    var _res = target.toString().split(search).join(replacement);
+    while (_res.length < prev.length) {
+        prev = _res;
+        _res = _res.toString().split(search).join(replacement);
+    }
 
-    return target.split(search).join(replacement);
+    return _res;
 }
 
 export default { symbolizer, convertInput, print };
