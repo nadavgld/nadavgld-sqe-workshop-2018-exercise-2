@@ -96,7 +96,7 @@ function handleAlternate(obj) {
 
 function handleConsequent(obj) {
     if (obj.consequent.body) {
-        getBody(obj.consequent.body);
+        getBody(obj.consequent);
     }
     else {
         getBody([obj.consequent]);
@@ -164,8 +164,9 @@ function handleForStatement(obj) {
     _container.push({ line, type: TYPES[obj.type], name: '', value: '', condition: init + ';' + test + ';' + update });
 
     // if (obj.body)
-    if (obj.body.type != 'BlockStatement')
+    if (obj.body.type != 'BlockStatement') {
         getBody([obj.body]);
+    }
 }
 
 function handleOperator(_newObj, _EXPRESSION, dontPush) {
@@ -256,7 +257,10 @@ function typeHandler3(obj) {
 
 function getBody(_body) {
     if (_body.type == 'BlockStatement') {
+        // _container.push({ line, type: 'block statement', name: '', value: '{', condition: '' })
         getBody(_body.body);
+        // line++;
+        // _container.push({ line, type: 'block statement', name: '', value: '}', condition: '' })
         return;
     }
 
@@ -277,7 +281,7 @@ function handleMemberExpression(obj) {
     var prop;
     if (obj.computed) {
         prop = recursiveChilds(obj.property).toString();
-        
+
         // if(!isNaN(parseInt(prop)))
         //     return prop;
 
@@ -323,7 +327,8 @@ function printTable() {
     _html = '';
     _container.forEach(obj => {
         // obj.value = obj.value == undefined ? '' : obj.value;
-        _html += `<tr><td>${obj.line}</td><td>${obj.type}</td><td>${obj.name}</td><td>${obj.condition}</td><td>${obj.value}</td></tr>`;
+        if (obj.type !== 'block statement')
+            _html += `<tr><td>${obj.line}</td><td>${obj.type}</td><td>${obj.name}</td><td>${obj.condition}</td><td>${obj.value}</td></tr>`;
     });
 
     return _html;

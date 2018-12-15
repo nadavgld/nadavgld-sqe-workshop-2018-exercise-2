@@ -10,8 +10,6 @@ const printSymbolReplacement = {
     'while statement': (c, symbol) => c.code.replace(/while.*{/, 'while (' + symbol.condition + ') {').toString(),
 };
 
-// TODO: Printing errs!!!
-
 // Initialize Symbolizer - convert input and handle predicats
 // Input - Parser obj result, String of input vector ex: (x=1,y=2..)
 function symbolizer(obj, input_vector) {
@@ -20,13 +18,8 @@ function symbolizer(obj, input_vector) {
     convertInput(input_vector);
 
     pred_table.forEach(pred => {
-        console.log(pred);
         handlePreds(pred);
     });
-
-    console.log(pred_table);
-    console.log(var_table);
-    console.log(symbolize);
 
     return symbolize;
 }
@@ -67,7 +60,8 @@ function handlePreds3(pred) {
     } else if (pred.type == 'else statement') {
         var p = handleElse(pred);
         symbolize.push(p);
-    } else if (pred.type == 'while statement') {
+        // } else if (pred.type == 'while statement') {
+    } else {
         handleWhile(pred);
     }
 }
@@ -131,6 +125,9 @@ function handleVarDecleration(pred) {
 // Handle If-statements - Enter block(scope), Convert value, Evaluate result, push to symbolize array
 // handle Else-if-statements as well, different - by callback, get previous statements result (if - true => else if - false)
 function handleIfStatement(_pred, callback) {
+    if (callback)
+        blockExit();
+
     blockEnter();
     var pred = JSON.parse(JSON.stringify(_pred));
 
@@ -148,6 +145,7 @@ function handleIfStatement(_pred, callback) {
 
 // Handle Else-statements - get previous statements result (if - true & else if - false => else - false)
 function handleElse(_pred) {
+    blockExit();
     var pred = JSON.parse(JSON.stringify(_pred));
 
     var _result = getPreviousIfResult();
@@ -159,7 +157,7 @@ function handleElse(_pred) {
 // Handle While-statements - Convert condition, push to symbolize array
 function handleWhile(_pred) {
     var pred = JSON.parse(JSON.stringify(_pred));
-    var _convertedCondition = convertValueToInputVars(pred.condition, false, false);
+    var _convertedCondition = convertValueToInputVars(pred.condition, false, true);
 
     pred.condition = _convertedCondition;
     symbolize.push(pred);
@@ -168,7 +166,7 @@ function handleWhile(_pred) {
 // Convert predict input by input variables
 // Params: value - predict value, toEval - boolean if to evaluate, notIf - boolean if the predict is if
 function convertValueToInputVars(value, toEval) {
-    if (value === undefined) return '';
+    // if (value === undefined) return '';
     if (isNumber(value) || isInputArray(value) || isInput(value))
         return handleQuickReplace(value, toEval);
 
@@ -176,34 +174,12 @@ function convertValueToInputVars(value, toEval) {
     return conditionHandler(value, toEval);
 }
 
-/*
-    var _replaceAgain = true;
-    var _convertedArr = replaceToInputs(value, toEval, notIf);
-    if (!toEval)
-        return replaceToInputs(_convertedArr.join(''), toEval, notIf).join('');
-
-    // While there's a variables to replace to input variable
-    var _numOfLoops = 0
-    while (_replaceAgain && _numOfLoops < 10) {
-        _numOfLoops++;
-        try {
-            var evalue = eval(_convertedArr.join(''));
-            _replaceAgain = false;
-            return evalue;
-        } catch (e) { _convertedArr = replaceToInputs(_convertedArr.join(''), toEval, notIf); }
-    }
-
-    return "'" + _convertedArr.join('') + "'";
-*/
-
 function handleQuickReplace(value, toEval) {
     if (isNumber(value)) return parseFloat(value);
 
     if (isInputArray(value)) return handleArrayQuick(value, toEval);
 
-    if (isInput(value)) return handleInputQuick(value, toEval);
-
-    return undefined;
+    return handleInputQuick(value, toEval);
 }
 
 function handleInputQuick(value, toEval) {
@@ -213,47 +189,18 @@ function handleInputQuick(value, toEval) {
 }
 
 function handleArrayQuick(value, toEval) {
-    if (toEval) return eval(getInputArrayValue(value));
-
+    if (toEval) {
+        try {
+            return eval(getInputArrayValue(value));
+        } catch (e) {
+            return getInputArrayValue(value);
+        }
+    }
     return getInputArrayValue(value);
 }
 
-// Check each charcter - if is input - evaluate its value,
-// else if is a var from var_table - takes its value\result 
-/*
-function replaceToInputs(value, toEval, notIf) {
-    var _convertedArr = [], splitted, indexToSkip;
-    splitted = value.split('').filter(l => l.trim().localeCompare(''));
-    splitted.forEach((l, index) => {
-        if (indexToSkip >= index)
-            return;
-
-        indexToSkip = handleReplaceInput(_convertedArr, l, toEval, index, splitted, notIf);
-        if (indexToSkip == undefined)
-            if (var_table[l] != undefined)
-                _convertedArr = _checkWhichToReplace(l, toEval, notIf, _convertedArr);
-            else
-                _convertedArr.push(l);
-    });
-
-    return _convertedArr;
-}
-
-function isCondition(value) {
-    if (value === undefined) return false;
-
-    const _arr = ['==', '===', '!=', '!==', '>', '<', '>=', '=>', '<=', '=<'];
-    for (var i = 0; i < _arr.length; i++)
-        if (value.indexOf(_arr[i]) > -1)
-            return true;
-
-    return false;
-}
-
-*/
-
 function conditionHandler(value, toEval) {
-    if (value === undefined) return '';
+    // if (value === undefined) return '';
     var _val = value.split(/==|===|!=|!==|[+]|-|[*]|\/|>|<|>=|=>|<=|=<|:|\(|\)/);
     _val.forEach(val => {
         var replacement = conditionTypeHandler(val, toEval);
@@ -306,7 +253,7 @@ function setReplacement(replacement, toEval, val) {
         replacement = val.trim();
 
     if (isNumberOrString(replacement) && toEval)
-        replacement = "'" + replacement + "'";
+        replacement = `'` + replacement + `'`;
 
     return replacement;
 }
@@ -316,40 +263,6 @@ function isNumberOrString(val) {
     /*(val.charCodeAt(0) >= 48 && val.charCodeAt(0) <= 57) ||*/
     return (val.charCodeAt(0) >= 65 && val.charCodeAt(0) <= 90) || (val.charCodeAt(0) >= 97 && val.charCodeAt(0) <= 122);
 }
-
-/*
-function handleReplaceInput(_convertedArr, l, toEval, index, arr) {
-    var key = "", i, j, variable = "";
-
-    for (var j = index; j < arr.length; j++) {
-        variable += arr[j];
-        if (isInput(variable)) {
-            _convertedArr.push(toEval ? var_table[variable].value : variable);
-            return j;
-        }
-
-        if (isInputArray(variable)) {
-            for (i = j; i < arr.length; i++) {
-                key += arr[i];
-                if (arr[i] == ']')
-                    break;
-            }
-
-            _convertedArr.push(toEval ? getInputArrayValue(key) : key);
-            return i;
-        }
-    }
-    return undefined;
-}
-
-// Previous function was too long so I had to split this one..
-function _checkWhichToReplace(l, toEval, notIf, _convertedArr) {
-    _convertedArr.push(toEval ? eval(var_table[l].result) : notIf ? var_table[l].result : var_table[l].value);
-
-    return _convertedArr;
-}
-
-*/
 
 // Remove +zeros from predicat input
 function removeZeros(x) {
@@ -368,8 +281,7 @@ function getPreviousIfResult() {
     var _hasTrue = false;
     var _prevIfs = 0;
     for (var i = symbolize.length - 1; i >= 0; i--) {
-
-        _prevIfs = symbolize[i].type == 'else statement' ? _prevIfs + 1 : _prevIfs;
+        _prevIfs = isNestedIf(symbolize[i], _prevIfs);
         _hasTrue = checkPrevSymbol(symbolize[i]);
         if (_hasTrue)
             break;
@@ -380,8 +292,11 @@ function getPreviousIfResult() {
                 break;
         }
     }
-
     return !_hasTrue;
+}
+
+function isNestedIf(symbol, _prevIfs) {
+    return symbol.type == 'else statement' ? _prevIfs + 1 : _prevIfs;
 }
 
 // Returns true if previous symbol was if\else-if and its value is true
@@ -419,31 +334,35 @@ function isInput(key) {
 }
 
 function isInputArray(key) {
-    if (key === undefined) return false;
+    // if (key === undefined) return false;
 
-    if (key.indexOf('[') > -1 && key.indexOf(']') > -1) {
+    if (key.indexOf('[') > -1 && key.indexOf(']') == key.length - 1) {
         var _key = key.trim().split(/\[|\]/)[0];
 
-        for (var i = 0; i < input.length; i++)
-            if (input[i].key == _key && (input[i].value instanceof Array))
-                return true;
-
-        return false;
+        return checkAllInputsAsArray(_key);
     }
 
     return var_table[key] !== undefined && var_table[key].value instanceof Array;
 }
 
+function checkAllInputsAsArray(_key) {
+    for (var i = 0; i < input.length; i++)
+        if (input[i].key == _key && (input[i].value instanceof Array))
+            return true;
+
+    return false;
+}
+
 function getInputArrayValue(str) {
-    if (isInputArray(str)) {
-        var _key = str.trim().split(/\[|\]/)[0];
-        var _index = str.trim().split(/\[|\]/)[1];
-        var index = convertValueToInputVars(_index, true, true);
+    // if (isInputArray(str)) {
+    var _key = str.trim().split(/\[|\]/)[0];
+    var _index = str.trim().split(/\[|\]/)[1];
+    var index = convertValueToInputVars(_index, true, true);
 
-        return var_table[_key].value[index];
-    }
+    return var_table[_key].value[index];
+    // }
 
-    return undefined;
+    // return undefined;
 }
 
 function setInputArrayValue(str, _result) {
@@ -460,28 +379,48 @@ function setInputArrayValue(str, _result) {
 // Print function - converts symbolized array of objects to html by source-code-string
 // Input - Symbols (symbolized array to print), srcCode (original code on left table)
 function print(symbols, srcCode) {
-    var _splitSrc = srcCode.split('\n');
-    var _removeSpaces = removeSpaces(_splitSrc);
-
-    var _filtered = [];
-    // Remove empty spaces on source code
+    var factor = 0, _splitSrc = srcCode.split('\n'), _filtered = [], _removeSpaces = removeSpaces(_splitSrc);
     for (var i = 0; i < _removeSpaces.length; i++) {
-        var isSymbol = symbols.find(t => t.line == i + 1);
-        if (isSymbol || _removeSpaces[i].indexOf('}') > -1 || _removeSpaces[i].indexOf('{') > -1) {
-            if (_removeSpaces[i].trim() == "}") {
-                _filtered.push({ code: _removeSpaces[i], line: i });
-
-                if (i + 1 < _removeSpaces.length) _filtered.push({ code: _removeSpaces[++i], line: i });
-
-            }
-            else
-                _filtered.push({ code: _removeSpaces[i], line: i + 1 });
+        var hasAdded = false;
+        if (_removeSpaces[i].trim() == '}') {
+            factor--;
+            hasAdded = pushToArray(_filtered, _removeSpaces, i, i + Math.abs(factor));
+            factor++;
+            factor = toReduceFactor(hasAdded, _removeSpaces, i, factor);
+            continue;
+        }
+        var isSymbol = symbols.find(t => t.line == i + 1 + factor);
+        if (isSymbol) {
+            var line = calculateLine(isSymbol, factor);
+            pushToArray(_filtered, _removeSpaces, i, line, isSymbol.line);
         }
     }
-
     return _replaceSymbols(symbols, _filtered);
 }
 
+function toReduceFactor(hasAdded, _removeSpaces, i, factor) {
+    if (hasAdded && _removeSpaces[i + 1]) return factor - 1;
+
+    return factor;
+}
+
+function calculateLine(isSymbol, factor) {
+    return factor < 0 ? isSymbol.line + Math.abs(factor) : isSymbol.line;
+}
+
+//Push data to new array and filter undefined and duplicated
+function pushToArray(array, oldArray, code, line, realLine) {
+    // if (oldArray[code] == undefined) return false;
+
+    if (array.find(l => l.line == line) === undefined || array.find(l => l.line == line).realLine === undefined) {
+        array.push({ code: oldArray[code], line, realLine });
+
+        return true;
+    } else { return false; }
+    // return false;
+}
+
+// Remove empty lines
 function removeSpaces(_splitSrc) {
     var _removeSpaces = [];
     for (var i = 0; i < _splitSrc.length; i++) {
@@ -494,20 +433,22 @@ function removeSpaces(_splitSrc) {
 
 //Foreach line of source-code, if it found on symbols array - replace the content to the symbolized value\condition
 function _replaceSymbols(symbols, code) {
+    var result = [];
     code.forEach(c => {
+        // if (c.code === undefined) return;
         if (c.code.trim() == '}') {
             // Keep on the amount of "spaces" (indent)
             c.html = c.code.replace(/ /g, '&nbsp; ');
+            result.push(c);
             return;
         }
-        var symbol = symbols.find(s => s.line == c.line);
-
-        if (symbol) {
-            // If symbol is found on the line of source code - replace its previous value\condition
-            c = replaceSymbol(c, symbol);
-        }
+        var symbol = symbols.find(s => s.line == c.realLine);
+        // If symbol is found on the line of source code - replace its previous value\condition
+        // if (symbol)
+        c = replaceSymbol(c, symbol);
+        result.push(c);
     });
-    return code;
+    return result;
 }
 
 function replaceSymbol(c, symbol) {
@@ -607,34 +548,12 @@ function convertToType(_value) {
 }
 
 function isNumber(_value) {
-    return !isNaN(parseInt(_value));
+    return !isNaN(Number(_value));
 }
-
-/*
-function isArray(_value) {
-    return _value.toString().indexOf('[') > -1;
-}
-
-function array_getIdentifier(_value) {
-    return _value.toString().split('[')[0];
-}
-*/
 
 function isInt(n) {
     return n % 1 === 0;
 }
-
-/*
-function containNumber(value) {
-    var _split = value.toString().split('')
-    for (var i = 0; i < _split.length; i++) {
-        if (isNumber(_split[i]))
-            return true;
-    }
-
-    return false;
-}
-*/
 
 function isBoolean(value) {
     value = value.toString();
@@ -642,7 +561,7 @@ function isBoolean(value) {
 }
 
 function toBoolean(value) {
-    return value.toLowerCase() == 'true'
+    return value.toLowerCase() == 'true';
 }
 
 // Help function - replace all "search" text with "replacement" text in target string
