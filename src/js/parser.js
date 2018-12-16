@@ -257,17 +257,13 @@ function typeHandler3(obj) {
 
 function getBody(_body) {
     if (_body.type == 'BlockStatement') {
-        // _container.push({ line, type: 'block statement', name: '', value: '{', condition: '' })
         getBody(_body.body);
-        // line++;
-        // _container.push({ line, type: 'block statement', name: '', value: '}', condition: '' })
         return;
     }
 
     for (let index = 0; index < _body.length; index++) {
         line++;
         const obj = _body[index];
-
         typeHandler(obj);
 
         if (obj.body) {

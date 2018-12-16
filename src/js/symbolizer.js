@@ -1,5 +1,5 @@
 // Global variables
-var var_table = {}, temp_table = {}, symbolize = [], input = [], pred_table;
+var var_table = {}, temp_table = {}, symbolize = [], input = [], pred_table, _isGlobal = true;
 
 // On printing symbolized code - replace original code by statement type
 const printSymbolReplacement = {
@@ -26,6 +26,7 @@ function symbolizer(obj, input_vector) {
 
 // Clear Global variables
 function _init() {
+    _isGlobal = true;
     var_table = {};
     temp_table = {};
     symbolize = [];
@@ -35,8 +36,10 @@ function _init() {
 
 // First type handler - check the predicat type and handle it
 function handlePreds(pred) {
-    if (pred.type == 'function declaration')
+    if (pred.type == 'function declaration'){
         symbolize.push(pred);
+        _isGlobal = false;
+    }
     else if (pred.type == 'variable declaration') {
         handleVarDecleration(pred);
     }
@@ -119,6 +122,11 @@ function handleVarDecleration(pred) {
         var _result = convertValueToInputVars(_value, true, true);
 
         var_table[pred.name] = { value: valueFromDictionary, result: _result };
+
+        if (_isGlobal){
+            input.push({ key: pred.name, value: _result });
+            symbolize.push(pred);
+        }
     }
 }
 
@@ -576,4 +584,8 @@ function replaceAll(target, search, replacement) {
     return _res;
 }
 
-export default { symbolizer, convertInput, print };
+function _getInput(){
+    return input;
+}
+
+export default { symbolizer, convertInput, print, _getInput};

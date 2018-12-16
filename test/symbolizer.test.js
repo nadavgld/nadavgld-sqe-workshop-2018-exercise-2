@@ -10,7 +10,9 @@ describe('Check Symbolizer functionallity', () => {
     it('Short function', () => {
         var input_vector2 = "(x=3,y=2,z=[1,'test',false])";
 
-        var func = `function foo(x, y, z){ 
+        var func = `
+        let w = 4;
+        function foo(x, y, z){ 
             let a = z[0] + x + y;
             return a + 1;            
          }`
@@ -19,10 +21,10 @@ describe('Check Symbolizer functionallity', () => {
 
         var { _line, _container } = parser.objectToTable(parsedCode);
         var symbols = symbolizer.symbolizer(_container, input_vector2, _line);
-         console.log(symbols);
+        var _inputs = symbolizer._getInput();
         assert.equal(
-            symbols[1].line.toString(),
-            '3'
+            symbols[2].line.toString(),
+            '4'
         );
     });
 

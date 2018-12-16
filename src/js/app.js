@@ -20,7 +20,7 @@ $(document).ready(function () {
         $('#parsedCode').val(JSON.stringify(parsedCode, null, 2));
 
         var _symbolizedHTML = symbolizer.print(symbols,codeToParse);
-        printSymbols(_symbolizedHTML, input_vector);
+        printSymbols(_symbolizedHTML);
     });
 });
 
@@ -29,10 +29,10 @@ function print(_html) {
     document.getElementById('outputTable').innerHTML = _html;
 }
 
-function printSymbols(symbols, inputs){
+function printSymbols(symbols){
     var _html = '';
-
-    _html += `<tr><td> ${inputs} </td></tr>`;
+    var _inputToPrint = symbolizer._getInput().map(i => i.key + '=' + i.value).join(', ');
+    _html += `<tr><td> ${_inputToPrint} </td></tr>`;
     symbols.forEach(symbol => {
         _html += `<tr><td style='background:${symbol.color}'> ${symbol.html} </td></tr>`;
     });
